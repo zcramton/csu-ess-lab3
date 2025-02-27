@@ -41,7 +41,7 @@ state_name <- "Colorado"
 target_date <- "2022-02-01"
 
 # Convert date column to Date type
-covid_data$date <- as.Date(covid_data$date)
+us_covid_data$date <- as.Date(us_covid_data$date)
 
 # Create a subset limiting data to Colorado with new case and death information.
 co_covid_data <- us_covid_data %>% 
@@ -97,31 +97,27 @@ us_census_formatted <- us_census %>%
   mutate(
     STATE = sprintf("%02d", as.numeric(STATE)),     # Format state to 2 digits
     COUNTY = sprintf("%03d", as.numeric(COUNTY)),   # Format county to 3 digits
-    FIPS = paste0(STATE, COUNTY)   # Combine state and county codes to get full 5 digit FIPS code. #DOTHIS: Fix mutate so FIPS shows in the tibbles
+    fips = paste0(STATE, COUNTY)   # Combine state and county codes to get full 5 digit FIPS code.
   )
 
 #Refine US Census Data
 us_census_2021 <- us_census_formatted %>% 
-  filter(COUNTY != "000") %>%    # Remove state level data DOTHIS: make sure "000" for CO is being removed
-  select(contains("NAME")|contains("2021"))   # Keep only columns with "NAME" or "2021"
+  # Remove state level data DOTHIS: make   sure "000" for CO is being removed
+  filter(COUNTY != "000") %>%    
+  
+  # Keep only columns with "NAME" or       "2021" (or the FIP Column)
+  select(
+         contains("NAME"),
+         contains("2021"),
+         fips)   
 ```
 
 ```{r}
 # Explore Census and CO COVID Data
-us_census_2021 %>% 
-  names() %>% 
-  dim() %>% 
-  nrow() %>% 
-  str() %>% 
-  glimpse() 
-co_covid_data %>% 
-  names() %>% 
-  dim() %>% 
-  nrow() %>% 
-  str() %>% 
-  glimpse()
+str(us_census_2021)
+str(co_covid_data)
 ```
-DOTHIS: In a few sentences describe the data & any similarities. Describe the range of co pop from 2021.
+DOTHIS: In a few sentences describe the data & any similarities.
 
 ```{r}
 # Find range of CO pops in 2021
@@ -138,18 +134,73 @@ co_pop_range
 ```
 In 2021 Colorado's least populous county had 741 permanent residents and the most populous county had 5,811,596 permanent residents.
 ```{r}
-# Join US Census data with CO covid data
+# Join US Census data with CO covid data for 2021
 co_combined <- co_covid_data %>% 
-  left_join(co_pop, by = "FIPS") 
+  left_join(us_census_2021, by = "fips") 
 
 # Calculate per capita (pc) statistics
-co_combined <- co_combined %>% 
+co_combined <- co_combined %>%
+  rename(pop_2021 = POPESTIMATE2021) %>% 
   mutate(
-    pc_cum_cases = cases / co_pop$`POPESTIMATE2021`,   # cumulative cases per capita
-    pc_cum_deaths = deaths / co_pop$`POPESTIMATE2021`,  # cumulative deaths per capita
-    pc_new_cases = new_cases /`POPESTIMATE2021`,   # new cases per capita
-    ps_new_deaths(),  # new deaths per capita
-  )
+    pc_cum_cases = cases / pop_2021,   # cumulative cases per capita
+    pc_cum_deaths = deaths / pop_2021,  # cumulative deaths per capita
+    pc_new_cases = new_cases / pop_2021,   # new cases per capita
+    pc_new_deaths = new_deaths / pop_2021,  # new deaths per capita
+  ) %>% 
+  # Narrow df to remove superfluous columns from census      data
+  select(1:8, 11, 27:30) #DOTHIS: Ask about more efficient way to execut; remove all with cap letters in header?
+
+# Generate tables (2) for the 5 counties with highest cumulative and new cases par capita for a target date.
+
+# Set new target date (if desired)
+target_date <- target_date
+
+# Counties with the worst cases
+worst_pc_cum_cases <- co_combined %>%
+  filter(date == target_date) %>% 
+  slice_max(pc_cum_cases, n = 5) %>% 
+  select(-state, -fips)
+
+#Counties with the worst deaths
+worst_pc_new_cases <- co_combined %>%
+  filter(date == target_date) %>% 
+  slice_max(pc_new_cases, n = 5) %>% 
+  select(-state, -fips)
+
+# Print worst cumulative cases table
+flextable(worst_pc_cum_cases) %>%
+  set_header_labels(
+    date = "Date",
+    county = "County",
+    cases = "Cumulative Cases",
+    deaths = "Cumulative Deaths",
+    new_cases = "New Cases",
+    new_deaths = "New Deaths",
+    pc_cum_cases = "Cumulative Cases Per Capita",
+    pc_cum_deaths = "Cumulative Deaths Per Capita",
+    pc_new_cases = "New Cases Per Capita",
+    pc_new_deaths = "New Deaths Per Capita"
+  ) %>% 
+  set_caption("Top 5 Counties for Cumulative Cases Per Capita") %>% 
+  align(part = "all", align = "center")
+
+#Print worst new cases table
+flextable(worst_pc_new_cases) %>% 
+    set_header_labels(
+    date = "Date",
+    county = "County",
+    cases = "Cumulative Cases",
+    deaths = "Cumulative Deaths",
+    new_cases = "New Cases",
+    new_deaths = "New Deaths",
+    pc_cum_cases = "Cumulative Cases Per Capita",
+    pc_cum_deaths = "Cumulative Deaths Per Capita",
+    pc_new_cases = "New Cases Per Capita",
+    pc_new_deaths = "New Deaths Per Capita"
+  ) %>% 
+  set_caption("Top 5 Counties for New Cases Per Capita") %>% 
+  align(part = "all", align = "center")
+
 ```
 
 ## Quesiton 3: Rolling Thresholds
