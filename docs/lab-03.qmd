@@ -1,10 +1,12 @@
 ---
 title: "Lab 3: COVID-19"
-subtitle: 'ESS 330 - Quantitiative Reasoning'
+subtitle: 'ESS 330 - Quantitative Reasoning'
 author:
-  - name: "[Zachary Cramton](https://zcramton.github.io)"
-    email: "[ZCramton@colostate.edu](mailto:zcramton@colostate.edu)"
+  - name: "Zachary Cramton"
+    url: "https://zcramton.github.io"
+    email: "ZCramton@colostate.edu"
 format: html
+toc: true
 ---
 
 ```{r}
