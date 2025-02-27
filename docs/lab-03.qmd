@@ -1,0 +1,105 @@
+---
+title: "Lab 3: COVID-19"
+subtitle: 'ESS 330 - Quantitiative Reasoning'
+author:
+  - name: "[Zachary Cramton](https://zcramton.github.io)"
+    email: "[ZCramton@colostate.edu](mailto:zcramton@colostate.edu)"
+format: html
+---
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+library(flextable)
+library(zoo)
+```
+
+## Question 1: Public Data
+
+```{r}
+# Read in and store NY Times US county covid data
+covid_data <- read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+
+# Read in and store CO Census data
+setwd("../csu-ess-lab3")
+co_census <- read_csv("data/co_census_2023_alldata.csv")
+
+# Check data structure to ensure it's loaded properly (remove the "#" on the line below to see output)
+  #str(covid_data)
+str(co_census)
+```
+
+DOTHIS: Text based reflection on the value of open source data.
+
+## Question 2: Daily Summary
+```{r}
+# Define state and date for the analysis
+state_name <- "Colorado"
+target_date <- "2022-02-01"
+
+# Convert date column to Date type
+covid_data$date <- as.Date(covid_data$date)
+
+# Create a subset limiting data to Colorado with new case and death information.
+colorado_data <- covid_data %>% 
+  filter(state == state_name) %>%  # Filter Colorado data
+  #summarize(county) %>%            # Collate data for each county
+  mutate(new_cases = cases - lag(cases)) %>%   # Create new column for new cases
+  mutate(new_deaths = deaths - lag(deaths))    # Create new column for new deaths
+
+# Create tables displaying the 5 counties with the highest cum/new cases.
+
+# Counties with the worst cases
+worst_cum_cases <- colorado_data %>%
+  filter(date == target_date) %>% 
+  slice_max(cases, n = 5) %>% 
+  select(-state, -fips)
+
+#Counties with the worst deaths
+worst_new_cases <- colorado_data %>%
+  filter(date == target_date) %>% 
+  slice_max(new_cases, n = 5) %>% 
+  select(-state, -fips)
+
+# Print worst cumulative cases table
+flextable(worst_cum_cases) %>%
+  set_header_labels(
+    date = "Date",
+    county = "County",
+    cases = "Cumulative Cases",
+    deaths = "Cumulative Deaths",
+    new_cases = "New Cases",
+    new_deaths = "New Deaths"
+  ) %>% 
+  set_caption("Top 5 Counties for Cumulative Cases") %>% 
+  align(part = "all", align = "center")
+
+#Print worst new cases table
+flextable(worst_new_cases) %>% 
+    set_header_labels(
+    date = "Date",
+    county = "County",
+    cases = "Cumulative Cases",
+    deaths = "Cumulative Deaths",
+    new_cases = "New Cases",
+    new_deaths = "New Deaths"
+  ) %>% 
+  set_caption("Top 5 Counties for New Cases") %>% 
+  align(part = "all", align = "center")
+```
+## Question 3: Normalizing Data
+
+
+## Quesiton 3: Rolling Thresholds
+
+
+## Question 5: Death toll
+
+
+## Question 6: Multi-State
+
+
+## Quesiton 7: Space & Time
+
+
+## Question 8: Cases vs. Deaths
