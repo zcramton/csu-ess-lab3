@@ -74,7 +74,7 @@ flextable(worst_cum_cases) %>%
     new_cases = "New Cases",
     new_deaths = "New Deaths"
   ) %>% 
-  set_caption("Top 5 Counties for Cumulative Cases") %>% 
+  set_caption("Top 5 Colorado Counties for Cumulative Cases") %>% 
   align(part = "all", align = "center")
 
 #Print worst new cases table
@@ -87,7 +87,7 @@ flextable(worst_new_cases) %>%
     new_cases = "New Cases",
     new_deaths = "New Deaths"
   ) %>% 
-  set_caption("Top 5 Counties for New Cases") %>% 
+  set_caption("Top 5 Colorado Counties for New Cases") %>% 
   align(part = "all", align = "center")
 ```
 ## Question 3: Normalizing Data
@@ -181,7 +181,7 @@ flextable(worst_pc_cum_cases) %>%
     pc_new_cases = "New Cases Per Capita",
     pc_new_deaths = "New Deaths Per Capita"
   ) %>% 
-  set_caption("Top 5 Counties for Cumulative Cases Per Capita") %>% 
+  set_caption("Top 5 Colorado Counties for Cumulative Cases Per Capita") %>% 
   align(part = "all", align = "center")
 
 #Print worst new cases table
@@ -198,12 +198,41 @@ flextable(worst_pc_new_cases) %>%
     pc_new_cases = "New Cases Per Capita",
     pc_new_deaths = "New Deaths Per Capita"
   ) %>% 
-  set_caption("Top 5 Counties for New Cases Per Capita") %>% 
+  set_caption("Top 5 Colorado Counties for New Cases Per Capita") %>% 
   align(part = "all", align = "center")
 
 ```
 
-## Quesiton 3: Rolling Thresholds
+## Quesiton 4: Rolling Thresholds
+
+```{r}
+# Get the latest date in the data set
+latest_date <- max(co_combined$date, na.rm = TRUE)
+
+# Filter for the last 14 days
+two_week_data <- co_combined %>% 
+  filter(date >= (latest_date - 14))
+
+# Summarize new cases per 100,000 residents
+summarized_per_100k <- two_week_data %>% 
+  group_by(county) %>% 
+  summarize(total_new_cases = sum(new_cases, TRUE),
+            population = first(population)) %>% 
+  mutate(cases_per_100k = (total_new_cases / population) * 100000) %>% 
+  arrange(desc(cases_per_100k))
+
+# Print the 5 worst colorado counties for 14-day new case numbers
+worst_14_day_counties <- head(summarized_per_100k, 5)
+print(worst_14_day_counties)
+
+# Count counties meeting the watch list condition (>100 cases per 100,000)
+watchlist_count <- worst_14_day_counties %>% 
+  filter(cases_per_100k > 100) %>%
+  nrow()
+
+print("Number of Colorado counties meeting the watch list condition:", watchlist_count, "\n")
+
+```
 
 
 ## Question 5: Death toll
