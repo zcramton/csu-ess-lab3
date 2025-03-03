@@ -216,8 +216,8 @@ two_week_data <- co_combined %>%
 # Summarize new cases per 100,000 residents
 summarized_per_100k <- two_week_data %>% 
   group_by(county) %>% 
-  summarize(total_new_cases = sum(new_cases, TRUE),
-            population = first(population)) %>% 
+  summarize(total_new_cases = sum(new_cases), na.rm = TRUE),
+            population = first(pop_2021), na.rm = TRUE) %>% 
   mutate(cases_per_100k = (total_new_cases / population) * 100000) %>% 
   arrange(desc(cases_per_100k))
 
@@ -233,7 +233,6 @@ watchlist_count <- worst_14_day_counties %>%
 print("Number of Colorado counties meeting the watch list condition:", watchlist_count, "\n")
 
 ```
-
 
 ## Question 5: Death toll
 
