@@ -254,12 +254,33 @@ cat("Number of counties meeting the watchlist condition:", watchlist_count)
 
 ## Question 5: Death toll
 ```{r}
-co_combined %>% 
+# Find the percentage of total deaths in 2021 that were from COVID by Colorado county
+co_combined_exp <- co_combined %>% 
+  filter(year(date) == (2021)) %>%                                             # Limit analysis to 2021 data
+
+  # Summarize total deaths and total covid deaths per county
+  group_by(county) %>%                                                 # Sort by county
+  summarize(total_covid_deaths_2021 = sum(deaths, na.rm = TRUE),       # Total covid deaths per county
+            total_deaths_2021 = sum(deaths_2021, na.rm = TRUE)) %>%    # Total deaths per county
   
+  # Create new column for percentage of deaths attributed to COVID
+  mutate(covid_death_percentage = (total_covid_deaths_2021 / total_deaths_2021) * 100)
+  
+# Identify high impact counties where >20% of deaths were caused by COVID
+high_impact_counties <- co_combined_exp %>% 
+  filter(covid_death_percentage >= 20)
+
+# Plot high impact counties
+ggplot(high_impact_counties, aes(x = reorder(county, covid_death_percentage), y = covid_death_percentage)) +
+  geom_col(fill = "darkred") +
+  labs(title = "Colorado Counties Where COVID-19 Caused >20% of Total Deaths in 2021",
+       x = "County",
+       y = "Percentage of Total Deaths Attributed to COVID") +
+  theme_minimal()
 ```
 
-
 ## Question 6: Multi-State
+
 
 
 ## Quesiton 7: Space & Time
