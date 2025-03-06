@@ -6,6 +6,8 @@ author:
     url: "https://zcramton.github.io"
     email: "ZCramton@colostate.edu"
 format: html
+execute:
+  echo: true
 toc: true
 ---
 
@@ -92,20 +94,21 @@ flextable(worst_new_cases) %>%
 ```
 ## Question 3: Normalizing Data
 ```{r}
-# Reformat FIPS data from 2-3 to 5 digit combined strings.
+#Refine US Census Data
 us_census_formatted <- us_census %>% 
+  # Remove state level data DOTHIS: make sure "000" for CO is being removed
+  filter(COUNTY != "000") %>%    
+  # Reformat FIPS data from 2-3 to 5 digit combined strings.
   mutate(
     STATE = sprintf("%02d", as.numeric(STATE)),     # Format state to 2 digits
     COUNTY = sprintf("%03d", as.numeric(COUNTY)),   # Format county to 3 digits
     fips = paste0(STATE, COUNTY)   # Combine state and county codes to get full 5 digit FIPS code.
   )
 
-#Refine US Census Data
+# Select 2021 data
 us_census_2021 <- us_census_formatted %>% 
-  # Remove state level data DOTHIS: make   sure "000" for CO is being removed
-  filter(COUNTY != "000") %>%    
   
-  # Keep only columns with "NAME" or       "2021" (or the FIP Column)
+  # Keep only columns with "NAME" or "2021" (or the FIP Column)
   select(
          contains("NAME"),
          contains("2021"),
@@ -136,33 +139,38 @@ In 2021 Colorado's least populous county had 741 permanent residents and the mos
 ```{r}
 # Join US Census data with CO covid data for 2021
 co_combined <- co_covid_data %>% 
-  left_join(us_census_2021, by = "fips") 
-
-# Calculate per capita (pc) statistics
-co_combined <- co_combined %>%
-  rename(pop_2021 = POPESTIMATE2021) %>% 
+  left_join(us_census_2021, by = "fips") %>% 
+  # Rename US Census Headers
+  rename(
+         pop_2021 = POPESTIMATE2021,
+         births_2021 = BIRTHS2021,
+         deaths_2021 = DEATHS2021
+         ) %>% 
+  # Calculate per capita (pc) statistics
   mutate(
-    pc_cum_cases = cases / pop_2021,   # cumulative cases per capita
-    pc_cum_deaths = deaths / pop_2021,  # cumulative deaths per capita
-    pc_new_cases = new_cases / pop_2021,   # new cases per capita
-    pc_new_deaths = new_deaths / pop_2021,  # new deaths per capita
-  ) %>% 
-  # Narrow df to remove superfluous columns from census      data
-  select(1:8, 11, 27:30) #DOTHIS: Ask about more efficient way to execut; remove all with cap letters in header?
+         pc_cum_cases = cases / pop_2021,   # cumulative cases per capita
+         pc_cum_deaths = deaths / pop_2021,  # cumulative deaths per capita
+         pc_new_cases = new_cases / pop_2021,   # new cases per capita
+         pc_new_deaths = new_deaths / pop_2021,  # new deaths per capita
+        ) %>% 
+  select(1:8, 11, 13:14, 27:30)
+  
+# Narrow df to further remove superfluous columns from census data
+co_combined_abbr <- co_combined %>% 
+  select(-births_2021, -deaths_2021)
 
 # Generate tables (2) for the 5 counties with highest cumulative and new cases par capita for a target date.
-
 # Set new target date (if desired)
 target_date <- target_date
 
-# Counties with the worst cases
-worst_pc_cum_cases <- co_combined %>%
+# Counties with the worst cumulative cases
+worst_pc_cum_cases <- co_combined_abbr %>%
   filter(date == target_date) %>% 
   slice_max(pc_cum_cases, n = 5) %>% 
   select(-state, -fips)
 
-#Counties with the worst deaths
-worst_pc_new_cases <- co_combined %>%
+#Counties with the worst new cases
+worst_pc_new_cases <- co_combined_abbr %>%
   filter(date == target_date) %>% 
   slice_max(pc_new_cases, n = 5) %>% 
   select(-state, -fips)
@@ -180,15 +188,16 @@ flextable(worst_pc_cum_cases) %>%
     pc_cum_deaths = "Cumulative Deaths Per Capita",
     pc_new_cases = "New Cases Per Capita",
     pc_new_deaths = "New Deaths Per Capita"
-  ) %>% 
+  ) %>%
   set_caption("Top 5 Colorado Counties for Cumulative Cases Per Capita") %>% 
   align(part = "all", align = "center")
 
 #Print worst new cases table
 flextable(worst_pc_new_cases) %>% 
-    set_header_labels(
+  set_header_labels(
     date = "Date",
     county = "County",
+    pop_2021 = "Population (2021)",
     cases = "Cumulative Cases",
     deaths = "Cumulative Deaths",
     new_cases = "New Cases",
@@ -206,35 +215,48 @@ flextable(worst_pc_new_cases) %>%
 ## Quesiton 4: Rolling Thresholds
 
 ```{r}
-# Get the latest date in the data set
-latest_date <- max(co_combined$date, na.rm = TRUE)
-
-# Filter for the last 14 days
-two_week_data <- co_combined %>% 
-  filter(date >= (latest_date - 14))
+# Get most recent 14 day data
+latest_date <- max(co_combined_abbr$date, na.rm = TRUE)   # Get the latest date in the data set
+two_week_data <- co_combined_abbr %>% 
+  filter(date >= (latest_date - 13))   # Filter for the last 14 days
 
 # Summarize new cases per 100,000 residents
-summarized_per_100k <- two_week_data %>% 
+two_wk_summary <- two_week_data %>% 
   group_by(county) %>% 
-  summarize(total_new_cases = sum(new_cases), na.rm = TRUE),
-            population = first(pop_2021), na.rm = TRUE) %>% 
-  mutate(cases_per_100k = (total_new_cases / population) * 100000) %>% 
-  arrange(desc(cases_per_100k))
+  summarize(total_cases_14d = sum(new_cases, na.rm = TRUE),
+            population = first(pop_2021)) %>% 
+  mutate(cases_per_100k = (total_cases_14d / population) * 100000)
 
-# Print the 5 worst colorado counties for 14-day new case numbers
-worst_14_day_counties <- head(summarized_per_100k, 5)
-print(worst_14_day_counties)
+# Find the 5 worst Colorado counties for 14-day new case numbers
+top_5_worst_14_day_counties <- two_wk_summary %>% 
+  slice_max(order_by = cases_per_100k, n = 5)
+
+# Print 5 worst counties for 14-day total new cases
+flextable(top_5_worst_14_day_counties) %>% 
+  set_header_labels(
+    county = "County",
+    total_cases_14d = "New Cases (14 Days)",
+    population = "Population",
+    cases_per_100k = "Cases Per 100,000"
+  ) %>% 
+  set_caption("Top 5 Colorado Counties for Total New Cases in the Past 14 Days") %>% 
+  align(part = "all", align = "center") %>% 
+  autofit()
 
 # Count counties meeting the watch list condition (>100 cases per 100,000)
-watchlist_count <- worst_14_day_counties %>% 
+watchlist_count <- two_wk_summary %>% 
   filter(cases_per_100k > 100) %>%
   nrow()
 
-print("Number of Colorado counties meeting the watch list condition:", watchlist_count, "\n")
-
+# Print the number of counties not meeting the watchlist condition.
+cat("Number of counties meeting the watchlist condition:", watchlist_count)
 ```
 
 ## Question 5: Death toll
+```{r}
+co_combined %>% 
+  
+```
 
 
 ## Question 6: Multi-State
