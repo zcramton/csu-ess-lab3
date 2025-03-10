@@ -33,8 +33,7 @@ us_census <- read_csv(census_url)
   #str(covid_data)
   #str(us_census)
 ```
-
-DOTHIS: Text based reflection on the value of open source data.
+Easily accessible, open source data provides the public with a means to hold the government, regulatory agencies and industry accountable. Historic data is particularly important for informing decisions in the present to avoid repeating historical mistakes. The present purge of information from numerous governmental websites is an excellent example of data loss benefiting a certain group at the detriment of those who wish to use previously collected data and established facts to contest ongoing changes. If you can't point to data and show it exists than you don't have a claim. If you don't have a claim, you don't have a cause. If you don't have a cause, you have nothing to fight for and become aimless. Causes can exist on hope for a time but at some point the lact of data and mutually understood facts will lead to chaos and disorder.
 
 ## Question 2: Daily Summary
 ```{r}
@@ -48,7 +47,7 @@ us_covid_data$date <- as.Date(us_covid_data$date)
 # Create a subset limiting data to Colorado with new case and death information.
 co_covid_data <- us_covid_data %>% 
   filter(state == state_name) %>%              # Filter Colorado data
-  #summarize(county) %>%                       # Collate data for each county
+  arrange(county, date) %>%                       # Collate data for each county and date
   mutate(new_cases = cases - lag(cases),       # Create new column for new cases
          new_deaths = deaths - lag(deaths))    # Create new column for new deaths
 
@@ -56,13 +55,13 @@ co_covid_data <- us_covid_data %>%
 
 # Counties with the worst cases
 worst_cum_cases <- co_covid_data %>%
-  filter(date == target_date) %>% 
+  filter(date == target_date_1) %>% 
   slice_max(cases, n = 5) %>% 
   select(-state, -fips)
 
 #Counties with the worst deaths
 worst_new_cases <- co_covid_data %>%
-  filter(date == target_date) %>% 
+  filter(date == target_date_1) %>% 
   slice_max(new_cases, n = 5) %>% 
   select(-state, -fips)
 
@@ -96,7 +95,7 @@ flextable(worst_new_cases) %>%
 ```{r}
 #Refine US Census Data
 us_census_formatted <- us_census %>% 
-  # Remove state level data DOTHIS: make sure "000" for CO is being removed
+  # Remove state level data
   filter(COUNTY != "000") %>%    
   # Reformat FIPS data from 2-3 to 5 digit combined strings.
   mutate(
@@ -120,7 +119,7 @@ us_census_2021 <- us_census_formatted %>%
 str(us_census_2021)
 str(co_covid_data)
 ```
-DOTHIS: In a few sentences describe the data & any similarities.
+The two data frames being explored are US Census and US COVID data. The Census data has not been processed much while the COVID data has been reduced to contain only the data essential to the lab. The COVID data is narrower but much longer in its current form whereas the census data is much wider but shorter. The census data has multiple years of typical census record data whiel the covid data spans certain dates during the peak of the pandemic. The "fips" header is shared with the same 5-digit fips identifier. 
 
 ```{r}
 # Find range of CO pops in 2021
@@ -135,7 +134,7 @@ co_pop_range <- range(co_pop$`POPESTIMATE2021`, na.rm = TRUE)
 #Print colorado pop range
 cat("Range of populations in Colorado counties in 2021:", co_pop_range)
 ```
-In 2021 Colorado's least populous county had 741 permanent residents and the most populous county had 5,811,596 permanent residents.
+In 2021 Colorado's least populous county had 741 permanent residents and the most populous county had 737,287 permanent residents.
 
 ```{r}
 # Join US Census data with CO covid data for 2021
@@ -283,15 +282,58 @@ ggplot(high_impact_counties, aes(x = reorder(county, covid_death_percentage), y 
 ## Question 6: Multi-State
 
 ```{r}
-Examine data from multiple states
-state_covid_data <- us_covid_data %>% 
+# Examine data from multiple states
+four_state_covid_data <- us_covid_data %>% 
   group_by(date, state) %>%            # Groups by day and state
-  summarize(cases = sum(cases)) %>%    # Sums the total cases per state per day
+  summarize(cases = sum(cases), .groups = "drop") %>%    # Sums the total cases per state per day
   filter(state %in% c("New York", "Ohio", "Colorado", "Alabama")) %>%   # Selected the target states
   group_by(state) %>%   # Ensures state data is separated.
-  mutate(new_cases = cases - lag(cases),
-         roll = rollmean(new_cases, k = 7, align = "right", fill = NA)) %>%
+  mutate(new_cases = cases - lag(cases),   # Computes the new cases per day (done previously in this lab but this section uses the original data).
+         roll_mean = rollmean(new_cases, k = 7, align = "right", fill = NA)) %>%  # Calculates a 7-day rolling avg. of new cases to smooth daily fluctuations and account for delayed testing data.
   ungroup()
+
+# Plot the COVID data for the four selected states separately for each state with bar charts and line graphs.
+ggplot(four_state_covid_data, aes(x = date)) +   
+  geom_col(aes(y = new_cases), fill = "darkred", col = NA, na.rm = TRUE) +
+  geom_line(aes(y = roll_mean), col = "black", linewidth = 1, na.rm = TRUE)  +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_date(date_breaks = "6 month", date_labels = "%b %y") +
+  facet_wrap(~state, nrow = 2, scales = "free_y") +
+  labs(title = "Daily COVID-19 Cases", x = "Date", y = "Case Count")
+
+# Compare cases per capita in each state
+
+# Bring in US Census data
+four_state_census_data <- us_census %>%
+  filter(STNAME %in% c("New York", "Ohio", "Colorado", "Alabama"),   # Selected the target states
+         COUNTY != "000") %>%   # Remove state level census data
+  
+  # Sort and sum for the 2021 population estimate in the selected states
+  group_by(STNAME) %>%   # Ensures state data is separated.
+  summarize(state_pop = sum(POPESTIMATE2021)) # Summarize state population
+
+# Merge COVID and Census (Pop) data frames  
+four_state_combined_data <- four_state_covid_data %>% 
+  inner_join(four_state_census_data, by = c("state" = "STNAME")) %>% # Merge data frames with the shared fips data
+  mutate(state_pc_new_cases = new_cases / state_pop) %>%  # Create new column in the df for state per capita new cases
+  
+  # Calc 7-day rolling mean for new cases per capita
+  arrange(state, date) %>% 
+  group_by(state) %>% 
+  mutate(pc_roll_mean = rollmean(state_pc_new_cases, k = 7, align = "right", fill = NA)) %>% 
+  ungroup()
+  
+# Plot the per capita COVID data for the four selected states separately for each state with bar charts and line graphs.
+ggplot(four_state_combined_data, aes(x = date)) +   
+  geom_col(aes(y = state_pc_new_cases), fill = "darkred", col = NA, na.rm = TRUE) +
+  geom_line(aes(y = pc_roll_mean), col = "black", linewidth = 1, na.rm = TRUE)  +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_date(date_breaks = "6 month", date_labels = "%b %y") +
+  facet_wrap(~state, nrow = 2, scales = "free_y") +
+  labs(title = "Daily COVID-19 Cases Per Capita", x = "Date", y = "Case Count Per Capita")
+  
 ```
 
 
