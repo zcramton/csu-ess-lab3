@@ -16,6 +16,9 @@ toc: true
 library(tidyverse)
 library(flextable)
 library(zoo)
+library(maps)
+library(patchwork)   # For Q8
+library(viridis)   # For easier time-based spatial mapping coloring
 ```
 
 ## Question 1: Public Data
@@ -33,9 +36,11 @@ us_census <- read_csv(census_url)
   #str(covid_data)
   #str(us_census)
 ```
+
 Easily accessible, open source data provides the public with a means to hold the government, regulatory agencies and industry accountable. Historic data is particularly important for informing decisions in the present to avoid repeating historical mistakes. The present purge of information from numerous governmental websites is an excellent example of data loss benefiting a certain group at the detriment of those who wish to use previously collected data and established facts to contest ongoing changes. If you can't point to data and show it exists than you don't have a claim. If you don't have a claim, you don't have a cause. If you don't have a cause, you have nothing to fight for and become aimless. Causes can exist on hope for a time but at some point the lact of data and mutually understood facts will lead to chaos and disorder.
 
 ## Question 2: Daily Summary
+
 ```{r}
 # Define state and date for the analysis
 state_name <- "Colorado"
@@ -91,7 +96,9 @@ flextable(worst_new_cases) %>%
   set_caption("Top 5 Colorado Counties for New Cases") %>% 
   align(part = "all", align = "center")
 ```
+
 ## Question 3: Normalizing Data
+
 ```{r}
 #Refine US Census Data
 us_census_formatted <- us_census %>% 
@@ -119,7 +126,8 @@ us_census_2021 <- us_census_formatted %>%
 str(us_census_2021)
 str(co_covid_data)
 ```
-The two data frames being explored are US Census and US COVID data. The Census data has not been processed much while the COVID data has been reduced to contain only the data essential to the lab. The COVID data is narrower but much longer in its current form whereas the census data is much wider but shorter. The census data has multiple years of typical census record data whiel the covid data spans certain dates during the peak of the pandemic. The "fips" header is shared with the same 5-digit fips identifier. 
+
+The two data frames being explored are US Census and US COVID data. The Census data has not been processed much while the COVID data has been reduced to contain only the data essential to the lab. The COVID data is narrower but much longer in its current form whereas the census data is much wider but shorter. The census data has multiple years of typical census record data whiel the covid data spans certain dates during the peak of the pandemic. The "fips" header is shared with the same 5-digit fips identifier.
 
 ```{r}
 # Find range of CO pops in 2021
@@ -134,6 +142,7 @@ co_pop_range <- range(co_pop$`POPESTIMATE2021`, na.rm = TRUE)
 #Print colorado pop range
 cat("Range of populations in Colorado counties in 2021:", co_pop_range)
 ```
+
 In 2021 Colorado's least populous county had 741 permanent residents and the most populous county had 737,287 permanent residents.
 
 ```{r}
@@ -253,6 +262,7 @@ cat("Number of counties meeting the watchlist condition:", watchlist_count)
 ```
 
 ## Question 5: Death toll
+
 ```{r}
 # Find the percentage of total deaths in 2021 that were from COVID by Colorado county
 co_combined_exp <- co_combined %>% 
@@ -335,9 +345,43 @@ ggplot(four_state_combined_data, aes(x = date)) +
   labs(title = "Daily COVID-19 Cases Per Capita", x = "Date", y = "Case Count Per Capita")
   
 ```
-
+Scaling by population tempered the apparent severity of new COVID-19 cases in states with high populations where there were more people to get sick. It made Alabama, with a relatively lower population look much worse because per person more people were getting sick by ~150%.
 
 ## Quesiton 7: Space & Time
 
+```{r}
+
+# Read in COVID-19 spatial data
+spatial_covid_url <- "https://raw.githubusercontent.com/mikejohnson51/csu-ess-330/refs/heads/main/resources/county-centroids.csv"
+spatial_covid_data <- read_csv(spatial_covid_url, show_col_types = FALSE)
+
+# Join spatial data with the NYT US COVID-19 data
+us_spatial_covid_data <- us_covid_data %>% 
+  inner_join(spatial_covid_data, by = "fips")  # Join us covid data with spatial data using fips
+
+# Calculate the weighted mean center ("epicenter") of the data for each date using lat and long.
+weighted_center_data <- us_spatial_covid_data %>% 
+  group_by(date) %>% 
+  reframe(
+    total_cases = sum(cases, na.rm = TRUE),   # Total cases for each date
+    LAT = sum(LAT * cases, na.rm = TRUE) / total_cases,   # Weighted mean y coord
+    LON = sum(LON * cases, na.rm = TRUE) / total_cases,   # Weighted mean x coord
+    month = format(date, "%m")   # Extract month from the date
+  ) %>% 
+  group_by(date) %>% 
+  arrange(date) %>%    # Sort df in chronological order
+  mutate(d = 1:n())   # Assign sequential numbers to the dates.
+  
+# Plot the weighted mean centers
+ggplot(weighted_center_data) +
+  borders("state", fill = "gray90", colour = "white") +   # Background US State map
+  geom_point(data = weighted_center_data, aes(x = LON, y = LAT, size = total_cases), color = "red", alpha = 0.25) +    # Epicenters
+  scale_color_viridis_d() + #   Discrete color scale for time
+  theme_minimal() +
+  theme(legend.position = "top") +
+  labs(color = "Month", size = "Cases", x = "", y = "", title = "Weighted Mean Center of COVID-19 Cases Over Time")
+```
+The weighted mean epicenter of the COVID-19 pandemic in the US was concentrated on the southern Midwest. Over time it centered on Missouri and Arkansas. This makes sense given the generally lower quarantine regulations found in Southern states and the high case counts found in the generally higher density Eastern States averaged against the lower density but high population Western States, California in particular.
 
 ## Question 8: Cases vs. Deaths
+WIP
